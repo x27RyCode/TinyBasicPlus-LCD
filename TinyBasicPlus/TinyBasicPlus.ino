@@ -1,5 +1,8 @@
+#include <PS2Keyboard.h>
+#include <LiquidCrystal.h>
+
 ////////////////////////////////////////////////////////////////////////////////
-// TinyBasic Plus
+// TinyBasic Plus 
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Authors: 
@@ -143,6 +146,7 @@ char eliminateCompileErrors = 1;  // fix to suppress arduino build errors
 #endif
 
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // Feature option configuration...
 
@@ -169,7 +173,7 @@ char eliminateCompileErrors = 1;  // fix to suppress arduino build errors
 // it adds 1.5k of usage as well.
 //#define ENABLE_TONES 1
 #undef ENABLE_TONES
-#define kPiezoPin 5
+#define kPiezoPin 0
 
 // we can use the EEProm to store a program during powerdown.  This is 
 // 1kbyte on the '328, and 512 bytes on the '168.  Enabling this here will
@@ -177,11 +181,6 @@ char eliminateCompileErrors = 1;  // fix to suppress arduino build errors
 // arduino.  Disable it for DUE/other devices.
 #define ENABLE_EEPROM 1
 //#undef ENABLE_EEPROM
-
-// Sometimes, we connect with a slower device as the console.
-// Set your console D0/D1 baud rate here (9600 baud default)
-#define kConsoleBaud 9600
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // fixes for RAMEND on some platforms
@@ -360,7 +359,6 @@ typedef short unsigned LINENUM;
 
 
 static unsigned char program[kRamSize];
-static const char *  sentinel = "HELLO";
 static unsigned char *txtpos,*list_line, *tmptxtpos;
 static unsigned char expression_error;
 static unsigned char *tempsp;
@@ -533,12 +531,12 @@ static const unsigned char okmsg[]            PROGMEM = "OK";
 static const unsigned char whatmsg[]          PROGMEM = "What? ";
 static const unsigned char howmsg[]           PROGMEM =	"How?";
 static const unsigned char sorrymsg[]         PROGMEM = "Sorry!";
-static const unsigned char initmsg[]          PROGMEM = "TinyBasic Plus " kVersion;
+static const unsigned char initmsg[]          PROGMEM = " LaseXBasic";
 static const unsigned char memorymsg[]        PROGMEM = " bytes free.";
 #ifdef ARDUINO
 #ifdef ENABLE_EEPROM
-static const unsigned char eeprommsg[]        PROGMEM = " EEProm bytes total.";
-static const unsigned char eepromamsg[]       PROGMEM = " EEProm bytes available.";
+static const unsigned char eeprommsg[]        PROGMEM = " bytes total.";
+static const unsigned char eepromamsg[]       PROGMEM = " bytes available.";
 #endif
 #endif
 static const unsigned char breakmsg[]         PROGMEM = "break!";
@@ -556,6 +554,8 @@ static void outchar(unsigned char c);
 static void line_terminator(void);
 static short int expression(void);
 static unsigned char breakcheck(void);
+LiquidCrystal lcd(0,1,2,5,6,7,8);
+PS2Keyboard keyboard;
 /***************************************************************************/
 static void ignore_blanks(void)
 {
@@ -1061,15 +1061,10 @@ void loop()
   stack_limit = program+sizeof(program)-STACK_SIZE;
   variables_begin = stack_limit - 27*VAR_SIZE;
 #endif
-
-  // memory free
-  printnum(variables_begin-program_end);
-  printmsg(memorymsg);
 #ifdef ARDUINO
 #ifdef ENABLE_EEPROM
   // eprom size
-  printnum( E2END+1 );
-  printmsg( eeprommsg );
+  
 #endif /* ENABLE_EEPROM */
 #endif /* ARDUINO */
 
@@ -1077,7 +1072,6 @@ warmstart:
   // this signifies that it is running in 'direct' mode.
   current_line = 0;
   sp = program+sizeof(program);
-  printmsg(okmsg);
 
 prompt:
   if( triggerRun ){
@@ -1775,9 +1769,6 @@ mem:
     for( i=0 ; (i<(E2END+1)) && (val != '\0') ; i++ ) {
       val = EEPROM.read( i );    
     }
-    printnum( (E2END +1) - (i-1) );
-    
-    printmsg( eepromamsg );
   }
 #endif /* ENABLE_EEPROM */
 #endif /* ARDUINO */
@@ -2054,13 +2045,10 @@ static void line_terminator(void)
 /***********************************************************/
 void setup()
 {
+ lcd.begin(16,4);
 #ifdef ARDUINO
-  Serial.begin(kConsoleBaud);	// opens serial port
-  while( !Serial ); // for Leonardo
-  
-  Serial.println( sentinel );
+  keyboard.begin(12,3);
   printmsg(initmsg);
-
 #ifdef ENABLE_FILEIO
   initSD();
   
@@ -2098,8 +2086,8 @@ void setup()
 static unsigned char breakcheck(void)
 {
 #ifdef ARDUINO
-  if(Serial.available())
-    return Serial.read() == CTRLC;
+  if(keyboard.available())
+    return keyboard.read() == CTRLC;
   return 0;
 #else
 #ifdef __CONIO__
@@ -2145,10 +2133,11 @@ static int inchar()
      break;
   case( kStreamSerial ):
   default:
-    while(1)
+     while(1)
     {
-      if(Serial.available())
-        return Serial.read();
+      if(keyboard.available()) {
+        return keyboard.read();
+      }
     }
   }
   
@@ -2174,6 +2163,8 @@ inchar_loadfinish:
 }
 
 /***********************************************************/
+int row = 0;
+int col = 0;
 static void outchar(unsigned char c)
 {
   if( inhibitOutput ) return;
@@ -2194,13 +2185,23 @@ static void outchar(unsigned char c)
     else 
   #endif /* ENABLE_EEPROM */
   #endif /* ARDUINO */
-    Serial.write(c);
-
-#else
-  putchar(c);
+    if(c ==  13 || c == 10) {
+      lcd.write("");
+    } else {
+      lcd.setCursor(col,row);
+      lcd.write(c);
+      col++;
+      if(col > 15) {
+        row++;
+        col = 0;
+      } else if(row > 3) {
+        row = 0;
+        lcd.clear();
+      }
+    }
+    
 #endif
 }
-
 /***********************************************************/
 /* SD Card helpers */
 
